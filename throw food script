@@ -1,0 +1,451 @@
+task.wait(2)
+
+-- ========== FIND BAR ==========
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
+local UIS = game:GetService("UserInputService")
+
+-- بحث عن البار العمودي في GUI
+local function findLuckBar()
+    for _, v in pairs(lp.PlayerGui:GetDescendants()) do
+        if v:IsA("Frame") then
+            -- البار العمودي عادة Size.Y أكبر من Size.X
+            if v.AbsoluteSize.Y > v.AbsoluteSize.X * 1.5 then
+                return v
+            end
+        end
+    end
+    return nil
+end
+
+-- بحث عن قيمة القوة
+local function findStrengthValue()
+    -- في leaderstats أولاً
+    local ls = lp:FindFirstChild("leaderstats")
+    if ls then
+        for _, v in pairs(ls:GetChildren()) do
+            if v:IsA("NumberValue") or v:IsA("IntValue") then
+                local n = v.Name:lower()
+                if n:find("strength") or n:find("str") 
+                or n:find("power") or n:find("muscle") then
+                    return v
+                end
+            end
+        end
+    end
+    -- بحث أعمق
+    for _, v in pairs(lp:GetDescendants()) do
+        if (v:IsA("NumberValue") or v:IsA("IntValue")) then
+            if math.abs(v.Value - 7303) < 100 then
+                return v
+            end
+        end
+    end
+    return nil
+end
+
+-- ========== INTERCEPT THROW ==========
+-- نعترض الضغط ونحقن قيمة 20
+local luckHackActive = false
+local strengthValue = 100
+
+-- Hook على FireServer
+local mt = getrawmetatable(game)
+local old_namecall
+old_namecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    if method == "FireServer" and luckHackActive then
+        local args = {...}
+        -- نبدل أي رقم صغير بـ 20 (قيمة البار)
+        for i, v in ipairs(args) do
+            if type(v) == "number" then
+                if v >= 0 and v <= 25 then
+                    args[i] = 20
+                end
+            end
+        end
+        return old_namecall(self, table.unpack(args))
+    end
+    -- Strength hack
+    if method == "FireServer" then
+        local args = {...}
+        local sname = tostring(self.Name):lower()
+        if sname:find("strength") or sname:find("upgrade") 
+        or sname:find("train") or sname:find("muscle") then
+            for i, v in ipairs(args) do
+                if type(v) == "number" then
+                    args[i] = strengthValue
+                end
+            end
+            return old_namecall(self, table.unpack(args))
+        end
+    end
+    return old_namecall(self, ...)
+end))
+
+-- ========== GUI ==========
+-- احذف القديم لو موجود
+for _, v in pairs(game.CoreGui:GetChildren()) do
+    if tostring(v.Name):find("ModeMenu") then v:Destroy() end
+end
+pcall(function()
+    for _, v in pairs(lp.PlayerGui:GetChildren()) do
+        if tostring(v.Name):find("ModeMenu") then v:Destroy() end
+    end
+end)
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ModeMenu_" .. math.random(10000,99999)
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+
+pcall(function()
+    if syn then syn.protect_gui(ScreenGui) end
+    ScreenGui.Parent = game.CoreGui
+end)
+if not ScreenGui.Parent or ScreenGui.Parent ~= game.CoreGui then
+    ScreenGui.Parent = lp.PlayerGui
+end
+
+-- Main Frame
+local Main = Instance.new("Frame")
+Main.Name = "Main"
+Main.Size = UDim2.new(0, 280, 0, 340)
+Main.Position = UDim2.new(0.5, -140, 0.3, 0)
+Main.BackgroundColor3 = Color3.fromRGB(10, 10, 20)
+Main.BorderSizePixel = 0
+Main.Parent = ScreenGui
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 16)
+
+local MainStroke = Instance.new("UIStroke")
+MainStroke.Color = Color3.fromRGB(100, 60, 220)
+MainStroke.Thickness = 1.8
+MainStroke.Parent = Main
+
+-- Title Bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 46)
+TitleBar.BackgroundColor3 = Color3.fromRGB(80, 40, 180)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = Main
+local tc = Instance.new("UICorner", TitleBar)
+tc.CornerRadius = UDim.new(0, 16)
+
+local TitleGrad = Instance.new("UIGradient")
+TitleGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(120, 60, 240)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(60, 20, 140))
+})
+TitleGrad.Rotation = 90
+TitleGrad.Parent = TitleBar
+
+local TitleTxt = Instance.new("TextLabel")
+TitleTxt.Text = "🌿  THROW MENU"
+TitleTxt.Size = UDim2.new(1, -90, 1, 0)
+TitleTxt.Position = UDim2.new(0, 14, 0, 0)
+TitleTxt.BackgroundTransparency = 1
+TitleTxt.TextColor3 = Color3.new(1,1,1)
+TitleTxt.TextSize = 15
+TitleTxt.Font = Enum.Font.GothamBold
+TitleTxt.TextXAlignment = Enum.TextXAlignment.Left
+TitleTxt.Parent = TitleBar
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Text = "—"
+MinBtn.Size = UDim2.new(0, 28, 0, 22)
+MinBtn.Position = UDim2.new(1, -64, 0.5, -11)
+MinBtn.BackgroundColor3 = Color3.fromRGB(50, 30, 100)
+MinBtn.TextColor3 = Color3.new(1,1,1)
+MinBtn.TextSize = 13
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.BorderSizePixel = 0
+MinBtn.Parent = TitleBar
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0,6)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Text = "✕"
+CloseBtn.Size = UDim2.new(0, 28, 0, 22)
+CloseBtn.Position = UDim2.new(1, -32, 0.5, -11)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 30, 50)
+CloseBtn.TextColor3 = Color3.new(1,1,1)
+CloseBtn.TextSize = 13
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Parent = TitleBar
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0,6)
+
+-- Content
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1, -20, 1, -56)
+Content.Position = UDim2.new(0, 10, 0, 50)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+-- ===== LUCK SECTION =====
+local LuckTitle = Instance.new("TextLabel")
+LuckTitle.Text = "🍀  AUTO LUCK  •  BAR MAX"
+LuckTitle.Size = UDim2.new(1, 0, 0, 18)
+LuckTitle.Position = UDim2.new(0, 0, 0, 0)
+LuckTitle.BackgroundTransparency = 1
+LuckTitle.TextColor3 = Color3.fromRGB(150, 100, 255)
+LuckTitle.TextSize = 11
+LuckTitle.Font = Enum.Font.GothamBold
+LuckTitle.TextXAlignment = Enum.TextXAlignment.Left
+LuckTitle.Parent = Content
+
+local LuckBtn = Instance.new("TextButton")
+LuckBtn.Size = UDim2.new(1, 0, 0, 44)
+LuckBtn.Position = UDim2.new(0, 0, 0, 22)
+LuckBtn.BackgroundColor3 = Color3.fromRGB(20, 15, 40)
+LuckBtn.BorderSizePixel = 0
+LuckBtn.Parent = Content
+Instance.new("UICorner", LuckBtn).CornerRadius = UDim.new(0, 10)
+
+local LuckBtnStroke = Instance.new("UIStroke")
+LuckBtnStroke.Color = Color3.fromRGB(80, 50, 160)
+LuckBtnStroke.Thickness = 1.2
+LuckBtnStroke.Parent = LuckBtn
+
+local LuckStatusTxt = Instance.new("TextLabel")
+LuckStatusTxt.Text = "  ⬤  Auto Max Luck — OFF"
+LuckStatusTxt.Size = UDim2.new(1, 0, 1, 0)
+LuckStatusTxt.BackgroundTransparency = 1
+LuckStatusTxt.TextColor3 = Color3.fromRGB(160, 160, 160)
+LuckStatusTxt.TextSize = 13
+LuckStatusTxt.Font = Enum.Font.GothamBold
+LuckStatusTxt.TextXAlignment = Enum.TextXAlignment.Left
+LuckStatusTxt.Parent = LuckBtn
+
+-- ===== STRENGTH SECTION =====
+local StrTitle = Instance.new("TextLabel")
+StrTitle.Text = "💪  STRENGTH OVERRIDE"
+StrTitle.Size = UDim2.new(1, 0, 0, 18)
+StrTitle.Position = UDim2.new(0, 0, 0, 80)
+StrTitle.BackgroundTransparency = 1
+StrTitle.TextColor3 = Color3.fromRGB(150, 100, 255)
+StrTitle.TextSize = 11
+StrTitle.Font = Enum.Font.GothamBold
+StrTitle.TextXAlignment = Enum.TextXAlignment.Left
+StrTitle.Parent = Content
+
+-- Value Display
+local ValFrame = Instance.new("Frame")
+ValFrame.Size = UDim2.new(1, 0, 0, 44)
+ValFrame.Position = UDim2.new(0, 0, 0, 102)
+ValFrame.BackgroundColor3 = Color3.fromRGB(20, 15, 40)
+ValFrame.BorderSizePixel = 0
+ValFrame.Parent = Content
+Instance.new("UICorner", ValFrame).CornerRadius = UDim.new(0,10)
+local ValStroke = Instance.new("UIStroke")
+ValStroke.Color = Color3.fromRGB(80,50,160)
+ValStroke.Thickness = 1.2
+ValStroke.Parent = ValFrame
+
+local ValDisplay = Instance.new("TextLabel")
+ValDisplay.Text = "Value: 10,000"
+ValDisplay.Size = UDim2.new(1, 0, 1, 0)
+ValDisplay.BackgroundTransparency = 1
+ValDisplay.TextColor3 = Color3.new(1,1,1)
+ValDisplay.TextSize = 14
+ValDisplay.Font = Enum.Font.GothamBold
+ValDisplay.Parent = ValFrame
+
+-- Buttons Row
+local function makeBtn(txt, xpos, color)
+    local b = Instance.new("TextButton")
+    b.Text = txt
+    b.Size = UDim2.new(0.3, -4, 0, 36)
+    b.Position = UDim2.new(xpos, 2, 0, 152)
+    b.BackgroundColor3 = color
+    b.TextColor3 = Color3.new(1,1,1)
+    b.TextSize = 12
+    b.Font = Enum.Font.GothamBold
+    b.BorderSizePixel = 0
+    b.Parent = Content
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,8)
+    return b
+end
+
+local BtnMinus = makeBtn("－ 1K", 0, Color3.fromRGB(140,30,30))
+local BtnReset = makeBtn("RESET", 0.35, Color3.fromRGB(50,40,90))
+local BtnPlus  = makeBtn("＋ 1K", 0.68, Color3.fromRGB(30,100,30))
+
+local ApplyBtn = Instance.new("TextButton")
+ApplyBtn.Text = "⚡  APPLY STRENGTH"
+ApplyBtn.Size = UDim2.new(1, 0, 0, 40)
+ApplyBtn.Position = UDim2.new(0, 0, 0, 196)
+ApplyBtn.BackgroundColor3 = Color3.fromRGB(90, 40, 180)
+ApplyBtn.TextColor3 = Color3.new(1,1,1)
+ApplyBtn.TextSize = 13
+ApplyBtn.Font = Enum.Font.GothamBold
+ApplyBtn.BorderSizePixel = 0
+ApplyBtn.Parent = Content
+Instance.new("UICorner", ApplyBtn).CornerRadius = UDim.new(0,10)
+local ApplyGrad = Instance.new("UIGradient")
+ApplyGrad.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(130,60,255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(70,20,160))
+})
+ApplyGrad.Rotation = 90
+ApplyGrad.Parent = ApplyBtn
+
+-- Status
+local StatusTxt = Instance.new("TextLabel")
+StatusTxt.Text = "● Ready"
+StatusTxt.Size = UDim2.new(1, 0, 0, 20)
+StatusTxt.Position = UDim2.new(0, 0, 0, 244)
+StatusTxt.BackgroundTransparency = 1
+StatusTxt.TextColor3 = Color3.fromRGB(80, 220, 80)
+StatusTxt.TextSize = 11
+StatusTxt.Font = Enum.Font.Gotham
+StatusTxt.TextXAlignment = Enum.TextXAlignment.Left
+StatusTxt.Parent = Content
+
+-- Credit
+local CreditTxt = Instance.new("TextLabel")
+CreditTxt.Text = "dotbhai @#9002111185000#"
+CreditTxt.Size = UDim2.new(1, 0, 0, 16)
+CreditTxt.Position = UDim2.new(0, 0, 0, 268)
+CreditTxt.BackgroundTransparency = 1
+CreditTxt.TextColor3 = Color3.fromRGB(60,50,100)
+CreditTxt.TextSize = 10
+CreditTxt.Font = Enum.Font.Gotham
+CreditTxt.TextXAlignment = Enum.TextXAlignment.Left
+CreditTxt.Parent = Content
+
+-- ========== DRAG ==========
+local dragging, dragInput, dragStart, startPos
+TitleBar.InputBegan:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.Touch
+    or inp.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = inp.Position
+        startPos = Main.Position
+        inp.Changed:Connect(function()
+            if inp.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+TitleBar.InputChanged:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.Touch
+    or inp.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragInput = inp
+    end
+end)
+UIS.InputChanged:Connect(function(inp)
+    if inp == dragInput and dragging then
+        local d = inp.Position - dragStart
+        Main.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + d.X,
+            startPos.Y.Scale, startPos.Y.Offset + d.Y
+        )
+    end
+end)
+
+-- ========== LUCK LOGIC ==========
+local luckOn = false
+LuckBtn.MouseButton1Click:Connect(function()
+    luckOn = not luckOn
+    luckHackActive = luckOn
+    if luckOn then
+        LuckStatusTxt.Text = "  ⬤  Auto Max Luck — ON"
+        LuckStatusTxt.TextColor3 = Color3.fromRGB(80, 255, 80)
+        LuckBtnStroke.Color = Color3.fromRGB(50, 200, 50)
+        StatusTxt.Text = "● Luck Hack Active"
+        StatusTxt.TextColor3 = Color3.fromRGB(80, 255, 80)
+    else
+        LuckStatusTxt.Text = "  ⬤  Auto Max Luck — OFF"
+        LuckStatusTxt.TextColor3 = Color3.fromRGB(160, 160, 160)
+        LuckBtnStroke.Color = Color3.fromRGB(80, 50, 160)
+        StatusTxt.Text = "● Ready"
+        StatusTxt.TextColor3 = Color3.fromRGB(80, 220, 80)
+    end
+end)
+
+-- ========== STRENGTH LOGIC ==========
+local strVal = 10000
+local function updateDisplay()
+    ValDisplay.Text = "Value: " .. tostring(strVal)
+end
+
+BtnPlus.MouseButton1Click:Connect(function()
+    strVal = strVal + 1000
+    updateDisplay()
+end)
+BtnMinus.MouseButton1Click:Connect(function()
+    strVal = math.max(100, strVal - 1000)
+    updateDisplay()
+end)
+BtnReset.MouseButton1Click:Connect(function()
+    strVal = 7303
+    updateDisplay()
+end)
+
+ApplyBtn.MouseButton1Click:Connect(function()
+    StatusTxt.Text = "● Applying..."
+    StatusTxt.TextColor3 = Color3.fromRGB(255, 200, 50)
+
+    -- طريقة 1: تعديل مباشر في leaderstats
+    pcall(function()
+        local ls = lp:FindFirstChild("leaderstats")
+        if ls then
+            for _, v in pairs(ls:GetChildren()) do
+                if v:IsA("NumberValue") or v:IsA("IntValue") then
+                    if math.abs(v.Value - 7303) < 500 
+                    or v.Name:lower():find("str") 
+                    or v.Name:lower():find("power")
+                    or v.Name:lower():find("muscle") then
+                        v.Value = strVal
+                    end
+                end
+            end
+        end
+    end)
+
+    -- طريقة 2: RemoteEvent
+    pcall(function()
+        local RS = game:GetService("ReplicatedStorage")
+        for _, v in pairs(RS:GetDescendants()) do
+            if v:IsA("RemoteEvent") then
+                local n = v.Name:lower()
+                if n:find("strength") or n:find("upgrade")
+                or n:find("train") or n:find("stat") then
+                    v:FireServer(strVal)
+                end
+            end
+        end
+    end)
+
+    -- طريقة 3: بحث بالقيمة الحالية
+    pcall(function()
+        strengthValue = strVal
+        for _, v in pairs(lp:GetDescendants()) do
+            if (v:IsA("NumberValue") or v:IsA("IntValue")) then
+                if v.Value == 7303 or v.Name:lower():find("str") then
+                    v.Value = strVal
+                end
+            end
+        end
+    end)
+
+    task.wait(0.4)
+    StatusTxt.Text = "● Done — " .. strVal
+    StatusTxt.TextColor3 = Color3.fromRGB(80, 255, 80)
+end)
+
+-- ========== MINIMIZE / CLOSE ==========
+local minimized = false
+MinBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    Content.Visible = not minimized
+    Main.Size = minimized 
+        and UDim2.new(0, 280, 0, 50) 
+        or UDim2.new(0, 280, 0, 340)
+    MinBtn.Text = minimized and "+" or "—"
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
