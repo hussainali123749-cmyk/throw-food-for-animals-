@@ -1,0 +1,547 @@
+task.wait(2)
+
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
+local RS = game:GetService("ReplicatedStorage")
+local UIS = game:GetService("UserInputService")
+local TS = game:GetService("TweenService")
+
+-- ========== FIND REMOTE ==========
+local ThrowStart = nil
+local ThrowComplete = nil
+
+pcall(function()
+    local Remotes = RS:WaitForChild("Remotes", 5)
+    ThrowStart = Remotes:WaitForChild("Throw_Start", 5)
+    ThrowComplete = Remotes:FindFirstChild("Throw_Complete")
+end)
+
+-- ========== FIND LUCK BAR ==========
+local function findLuckBar()
+    -- نبحث عن Frame عمودي يتغير حجمه
+    for _, v in pairs(lp.PlayerGui:GetDescendants()) do
+        if v:IsA("Frame") then
+            local sz = v.AbsoluteSize
+            -- البار العمودي: طوله أكبر من عرضه
+            if sz.Y > sz.X * 2 and sz.Y > 50 then
+                return v
+            end
+        end
+    end
+    return nil
+end
+
+-- ========== FIND STRENGTH ==========
+local StrengthValue = nil
+local function findStrength()
+    -- بحث بالقيمة 7303
+    for _, v in pairs(lp:GetDescendants()) do
+        if (v:IsA("NumberValue") or v:IsA("IntValue")) then
+            if math.abs(v.Value - 7303) < 200 then
+                return v
+            end
+        end
+    end
+    -- بحث بالاسم
+    for _, v in pairs(lp:GetDescendants()) do
+        if (v:IsA("NumberValue") or v:IsA("IntValue")) then
+            local n = v.Name:lower()
+            if n:find("strength") or n:find("str") or n:find("power") then
+                return v
+            end
+        end
+    end
+    return nil
+end
+StrengthValue = findStrength()
+
+-- ========== HOOK NAMECALL ==========
+local luckHackOn = false
+local autoThrowOn = false
+local customStrength = 9999
+
+local old_namecall
+old_namecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
+    local method = getnamecallmethod()
+    if method == "FireServer" then
+        local name = tostring(self.Name):lower()
+        if luckHackOn and (name:find("throw") or name == "throw_start") then
+            local args = {...}
+            for i, v in ipairs(args) do
+                if type(v) == "number" and v >= 0 and v <= 25 then
+                    args[i] = 20
+                end
+            end
+            return old_namecall(self, table.unpack(args))
+        end
+    end
+    return old_namecall(self, ...)
+end))
+
+-- ========== AUTO THROW SYSTEM ==========
+-- يراقب البار ويرمي تلقائياً عند 20
+local autoThrowConnection = nil
+
+local function startAutoThrow()
+    if autoThrowConnection then
+        autoThrowConnection:Disconnect()
+    end
+
+    autoThrowConnection = game:GetService("RunService").Heartbeat:Connect(function()
+        if not autoThrowOn then return end
+        if not ThrowStart then return end
+
+        pcall(function()
+            -- طريقة 1: نضغط على الشاشة تلقائياً
+            -- نحاكي الضغط على الشاشة
+            local vs = game:GetService("VirtualInputManager")
+            if vs then
+                -- ضغط في وسط الشاشة
+                local cam = workspace.CurrentCamera
+                local center = cam.ViewportSize / 2
+                vs:SendMouseButtonEvent(center.X, center.Y, 0, true, game, 0)
+                task.wait(0.05)
+                vs:SendMouseButtonEvent(center.X, center.Y, 0, false, game, 0)
+            end
+        end)
+
+        -- طريقة 2: FireServer مباشرة بقيمة 20
+        pcall(function()
+            if luckHackOn then
+                ThrowStart:FireServer(20)
+            else
+                ThrowStart:FireServer(math.random(15, 20))
+            end
+        end)
+
+        -- انتظر قبل الرمية التالية
+        task.wait(2 + math.random())
+    end)
+end
+
+-- ========== SET STRENGTH ==========
+local function setStrengthNow(val)
+    pcall(function()
+        if StrengthValue then
+            StrengthValue.Value = val
+        end
+    end)
+    pcall(function()
+        for _, v in pairs(RS:GetDescendants()) do
+            if v:IsA("RemoteEvent") then
+                local n = v.Name:lower()
+                if n:find("strength") or n:find("upgrade")
+                or n:find("stat") or n:find("set") then
+                    v:FireServer(val)
+                end
+            end
+        end
+    end)
+    pcall(function()
+        if ThrowComplete then
+            ThrowComplete:FireServer(val)
+        end
+    end)
+end
+
+-- ========== GUI ==========
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "ThrowMenu_"..math.random(10000,99999)
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+pcall(function()
+    if syn then syn.protect_gui(ScreenGui) end
+    ScreenGui.Parent = game.CoreGui
+end)
+if ScreenGui.Parent ~= game.CoreGui then
+    ScreenGui.Parent = lp.PlayerGui
+end
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 300, 0, 520)
+Main.Position = UDim2.new(0.5, -150, 0.5, -260)
+Main.BackgroundColor3 = Color3.fromRGB(8, 8, 18)
+Main.BorderSizePixel = 0
+Main.Parent = ScreenGui
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 16)
+local ms = Instance.new("UIStroke", Main)
+ms.Color = Color3.fromRGB(100, 60, 220)
+ms.Thickness = 2
+
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 46)
+TitleBar.BackgroundColor3 = Color3.fromRGB(60, 20, 140)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = Main
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 16)
+local tg = Instance.new("UIGradient", TitleBar)
+tg.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(120,60,240)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(40,10,120))
+})
+tg.Rotation = 90
+
+local TitleTxt = Instance.new("TextLabel")
+TitleTxt.Text = "🌿  THROW MENU  v3"
+TitleTxt.Size = UDim2.new(1,-90,1,0)
+TitleTxt.Position = UDim2.new(0,14,0,0)
+TitleTxt.BackgroundTransparency = 1
+TitleTxt.TextColor3 = Color3.new(1,1,1)
+TitleTxt.TextSize = 13
+TitleTxt.Font = Enum.Font.GothamBold
+TitleTxt.TextXAlignment = Enum.TextXAlignment.Left
+TitleTxt.Parent = TitleBar
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Text = "—"
+MinBtn.Size = UDim2.new(0,28,0,22)
+MinBtn.Position = UDim2.new(1,-64,0.5,-11)
+MinBtn.BackgroundColor3 = Color3.fromRGB(50,30,100)
+MinBtn.TextColor3 = Color3.new(1,1,1)
+MinBtn.TextSize = 12
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.BorderSizePixel = 0
+MinBtn.Parent = TitleBar
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0,6)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Text = "✕"
+CloseBtn.Size = UDim2.new(0,28,0,22)
+CloseBtn.Position = UDim2.new(1,-32,0.5,-11)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180,30,50)
+CloseBtn.TextColor3 = Color3.new(1,1,1)
+CloseBtn.TextSize = 12
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Parent = TitleBar
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0,6)
+
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1,-16,1,-56)
+Content.Position = UDim2.new(0,8,0,50)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+-- Remote Status
+local RemoteStatus = Instance.new("TextLabel")
+RemoteStatus.Text = ThrowStart and
+    "✓ Throw_Start وُجد" or "✗ RemoteEvent لم يُوجد"
+RemoteStatus.Size = UDim2.new(1,0,0,16)
+RemoteStatus.Position = UDim2.new(0,0,0,0)
+RemoteStatus.BackgroundTransparency = 1
+RemoteStatus.TextColor3 = ThrowStart and
+    Color3.fromRGB(80,255,80) or Color3.fromRGB(255,80,80)
+RemoteStatus.TextSize = 10
+RemoteStatus.Font = Enum.Font.Gotham
+RemoteStatus.TextXAlignment = Enum.TextXAlignment.Left
+RemoteStatus.Parent = Content
+
+local StrStatus = Instance.new("TextLabel")
+StrStatus.Text = StrengthValue and
+    "✓ Strength: "..tostring(StrengthValue.Value) or
+    "✗ Strength: سيُحدَّث لاحقاً"
+StrStatus.Size = UDim2.new(1,0,0,16)
+StrStatus.Position = UDim2.new(0,0,0,18)
+StrStatus.BackgroundTransparency = 1
+StrStatus.TextColor3 = StrengthValue and
+    Color3.fromRGB(80,255,80) or Color3.fromRGB(255,200,50)
+StrStatus.TextSize = 10
+StrStatus.Font = Enum.Font.Gotham
+StrStatus.TextXAlignment = Enum.TextXAlignment.Left
+StrStatus.Parent = Content
+
+-- ===== AUTO THROW =====
+local AutoLabel = Instance.new("TextLabel")
+AutoLabel.Text = "🤖  AUTO THROW + MAX LUCK"
+AutoLabel.Size = UDim2.new(1,0,0,18)
+AutoLabel.Position = UDim2.new(0,0,0,42)
+AutoLabel.BackgroundTransparency = 1
+AutoLabel.TextColor3 = Color3.fromRGB(150,100,255)
+AutoLabel.TextSize = 11
+AutoLabel.Font = Enum.Font.GothamBold
+AutoLabel.TextXAlignment = Enum.TextXAlignment.Left
+AutoLabel.Parent = Content
+
+local AutoBtn = Instance.new("TextButton")
+AutoBtn.Text = "  🤖  AUTO THROW — OFF"
+AutoBtn.Size = UDim2.new(1,0,0,42)
+AutoBtn.Position = UDim2.new(0,0,0,62)
+AutoBtn.BackgroundColor3 = Color3.fromRGB(20,15,40)
+AutoBtn.TextColor3 = Color3.fromRGB(160,160,160)
+AutoBtn.TextSize = 13
+AutoBtn.Font = Enum.Font.GothamBold
+AutoBtn.TextXAlignment = Enum.TextXAlignment.Left
+AutoBtn.BorderSizePixel = 0
+AutoBtn.Parent = Content
+Instance.new("UICorner", AutoBtn).CornerRadius = UDim.new(0,10)
+local abs = Instance.new("UIStroke", AutoBtn)
+abs.Color = Color3.fromRGB(80,50,160)
+abs.Thickness = 1.2
+
+-- ===== LUCK ONLY =====
+local LuckLabel = Instance.new("TextLabel")
+LuckLabel.Text = "🍀  LUCK INTERCEPT"
+LuckLabel.Size = UDim2.new(1,0,0,18)
+LuckLabel.Position = UDim2.new(0,0,0,116)
+LuckLabel.BackgroundTransparency = 1
+LuckLabel.TextColor3 = Color3.fromRGB(150,100,255)
+LuckLabel.TextSize = 11
+LuckLabel.Font = Enum.Font.GothamBold
+LuckLabel.TextXAlignment = Enum.TextXAlignment.Left
+LuckLabel.Parent = Content
+
+local LuckBtn = Instance.new("TextButton")
+LuckBtn.Text = "  🍀  LUCK HACK — OFF"
+LuckBtn.Size = UDim2.new(1,0,0,38)
+LuckBtn.Position = UDim2.new(0,0,0,136)
+LuckBtn.BackgroundColor3 = Color3.fromRGB(20,15,40)
+LuckBtn.TextColor3 = Color3.fromRGB(160,160,160)
+LuckBtn.TextSize = 13
+LuckBtn.Font = Enum.Font.GothamBold
+LuckBtn.TextXAlignment = Enum.TextXAlignment.Left
+LuckBtn.BorderSizePixel = 0
+LuckBtn.Parent = Content
+Instance.new("UICorner", LuckBtn).CornerRadius = UDim.new(0,10)
+local lbs = Instance.new("UIStroke", LuckBtn)
+lbs.Color = Color3.fromRGB(80,50,160)
+lbs.Thickness = 1.2
+
+-- ===== STRENGTH =====
+local StrLabel = Instance.new("TextLabel")
+StrLabel.Text = "💪  STRENGTH OVERRIDE"
+StrLabel.Size = UDim2.new(1,0,0,18)
+StrLabel.Position = UDim2.new(0,0,0,186)
+StrLabel.BackgroundTransparency = 1
+StrLabel.TextColor3 = Color3.fromRGB(150,100,255)
+StrLabel.TextSize = 11
+StrLabel.Font = Enum.Font.GothamBold
+StrLabel.TextXAlignment = Enum.TextXAlignment.Left
+StrLabel.Parent = Content
+
+local ValFrame = Instance.new("Frame")
+ValFrame.Size = UDim2.new(1,0,0,34)
+ValFrame.Position = UDim2.new(0,0,0,206)
+ValFrame.BackgroundColor3 = Color3.fromRGB(20,15,40)
+ValFrame.BorderSizePixel = 0
+ValFrame.Parent = Content
+Instance.new("UICorner", ValFrame).CornerRadius = UDim.new(0,10)
+local vs = Instance.new("UIStroke", ValFrame)
+vs.Color = Color3.fromRGB(80,50,160)
+vs.Thickness = 1
+
+local ValTxt = Instance.new("TextLabel")
+ValTxt.Text = "القيمة: "..tostring(customStrength)
+ValTxt.Size = UDim2.new(1,0,1,0)
+ValTxt.BackgroundTransparency = 1
+ValTxt.TextColor3 = Color3.new(1,1,1)
+ValTxt.TextSize = 13
+ValTxt.Font = Enum.Font.GothamBold
+ValTxt.Parent = ValFrame
+
+local function makeBtn(txt, xScale, col)
+    local b = Instance.new("TextButton")
+    b.Text = txt
+    b.Size = UDim2.new(0.3,-4,0,32)
+    b.Position = UDim2.new(xScale,2,0,246)
+    b.BackgroundColor3 = col
+    b.TextColor3 = Color3.new(1,1,1)
+    b.TextSize = 12
+    b.Font = Enum.Font.GothamBold
+    b.BorderSizePixel = 0
+    b.Parent = Content
+    Instance.new("UICorner", b).CornerRadius = UDim.new(0,8)
+    return b
+end
+
+local BtnMinus = makeBtn("－ 1K", 0, Color3.fromRGB(140,30,30))
+local BtnReset = makeBtn("RESET", 0.35, Color3.fromRGB(50,40,90))
+local BtnPlus  = makeBtn("＋ 1K", 0.68, Color3.fromRGB(30,100,30))
+
+local ApplyBtn = Instance.new("TextButton")
+ApplyBtn.Text = "⚡  APPLY STRENGTH"
+ApplyBtn.Size = UDim2.new(1,0,0,36)
+ApplyBtn.Position = UDim2.new(0,0,0,284)
+ApplyBtn.BackgroundColor3 = Color3.fromRGB(80,40,180)
+ApplyBtn.TextColor3 = Color3.new(1,1,1)
+ApplyBtn.TextSize = 13
+ApplyBtn.Font = Enum.Font.GothamBold
+ApplyBtn.BorderSizePixel = 0
+ApplyBtn.Parent = Content
+Instance.new("UICorner", ApplyBtn).CornerRadius = UDim.new(0,10)
+local ag = Instance.new("UIGradient", ApplyBtn)
+ag.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(130,60,255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(60,20,160))
+})
+ag.Rotation = 90
+
+local StatusTxt = Instance.new("TextLabel")
+StatusTxt.Text = "● Ready"
+StatusTxt.Size = UDim2.new(1,0,0,20)
+StatusTxt.Position = UDim2.new(0,0,0,326)
+StatusTxt.BackgroundTransparency = 1
+StatusTxt.TextColor3 = Color3.fromRGB(80,220,80)
+StatusTxt.TextSize = 11
+StatusTxt.Font = Enum.Font.Gotham
+StatusTxt.TextXAlignment = Enum.TextXAlignment.Left
+StatusTxt.Parent = Content
+
+local ThrowCountTxt = Instance.new("TextLabel")
+ThrowCountTxt.Text = "رميات: 0"
+ThrowCountTxt.Size = UDim2.new(1,0,0,16)
+ThrowCountTxt.Position = UDim2.new(0,0,0,348)
+ThrowCountTxt.BackgroundTransparency = 1
+ThrowCountTxt.TextColor3 = Color3.fromRGB(150,150,200)
+ThrowCountTxt.TextSize = 10
+ThrowCountTxt.Font = Enum.Font.Gotham
+ThrowCountTxt.TextXAlignment = Enum.TextXAlignment.Left
+ThrowCountTxt.Parent = Content
+
+local CreditTxt = Instance.new("TextLabel")
+CreditTxt.Text = "dotbhai @#9002111185000#  •  v3"
+CreditTxt.Size = UDim2.new(1,0,0,14)
+CreditTxt.Position = UDim2.new(0,0,0,366)
+CreditTxt.BackgroundTransparency = 1
+CreditTxt.TextColor3 = Color3.fromRGB(60,50,100)
+CreditTxt.TextSize = 10
+CreditTxt.Font = Enum.Font.Gotham
+CreditTxt.TextXAlignment = Enum.TextXAlignment.Left
+CreditTxt.Parent = Content
+
+-- ========== DRAG ==========
+local dragging, dragInput, dragStart, startPos
+TitleBar.InputBegan:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.Touch
+    or inp.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = inp.Position
+        startPos = Main.Position
+        inp.Changed:Connect(function()
+            if inp.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+TitleBar.InputChanged:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.Touch
+    or inp.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragInput = inp
+    end
+end)
+UIS.InputChanged:Connect(function(inp)
+    if inp == dragInput and dragging then
+        local d = inp.Position - dragStart
+        Main.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + d.X,
+            startPos.Y.Scale, startPos.Y.Offset + d.Y
+        )
+    end
+end)
+
+-- ========== AUTO THROW LOGIC ==========
+local throwCount = 0
+
+AutoBtn.MouseButton1Click:Connect(function()
+    autoThrowOn = not autoThrowOn
+    luckHackOn = autoThrowOn -- يفعّل Luck تلقائياً مع Auto
+
+    if autoThrowOn then
+        AutoBtn.Text = "  🤖  AUTO THROW — ON"
+        AutoBtn.TextColor3 = Color3.fromRGB(80,255,80)
+        abs.Color = Color3.fromRGB(50,200,50)
+        LuckBtn.Text = "  🍀  LUCK HACK — ON"
+        LuckBtn.TextColor3 = Color3.fromRGB(80,255,80)
+        lbs.Color = Color3.fromRGB(50,200,50)
+        StatusTxt.Text = "● Auto Throw نشط"
+        StatusTxt.TextColor3 = Color3.fromRGB(80,255,80)
+
+        -- Auto throw loop
+        task.spawn(function()
+            while autoThrowOn do
+                pcall(function()
+                    if ThrowStart then
+                        ThrowStart:FireServer(20)
+                        throwCount = throwCount + 1
+                        ThrowCountTxt.Text = "رميات: "..tostring(throwCount)
+                    end
+                end)
+                task.wait(1.5 + math.random() * 0.5)
+            end
+        end)
+    else
+        autoThrowOn = false
+        luckHackOn = false
+        AutoBtn.Text = "  🤖  AUTO THROW — OFF"
+        AutoBtn.TextColor3 = Color3.fromRGB(160,160,160)
+        abs.Color = Color3.fromRGB(80,50,160)
+        LuckBtn.Text = "  🍀  LUCK HACK — OFF"
+        LuckBtn.TextColor3 = Color3.fromRGB(160,160,160)
+        lbs.Color = Color3.fromRGB(80,50,160)
+        StatusTxt.Text = "● Stopped"
+        StatusTxt.TextColor3 = Color3.fromRGB(220,80,80)
+    end
+end)
+
+-- ========== LUCK ONLY ==========
+LuckBtn.MouseButton1Click:Connect(function()
+    if autoThrowOn then return end
+    luckHackOn = not luckHackOn
+    if luckHackOn then
+        LuckBtn.Text = "  🍀  LUCK HACK — ON"
+        LuckBtn.TextColor3 = Color3.fromRGB(80,255,80)
+        lbs.Color = Color3.fromRGB(50,200,50)
+    else
+        LuckBtn.Text = "  🍀  LUCK HACK — OFF"
+        LuckBtn.TextColor3 = Color3.fromRGB(160,160,160)
+        lbs.Color = Color3.fromRGB(80,50,160)
+    end
+end)
+
+-- ========== STRENGTH ==========
+BtnPlus.MouseButton1Click:Connect(function()
+    customStrength = customStrength + 1000
+    ValTxt.Text = "القيمة: "..tostring(customStrength)
+end)
+BtnMinus.MouseButton1Click:Connect(function()
+    customStrength = math.max(100, customStrength - 1000)
+    ValTxt.Text = "القيمة: "..tostring(customStrength)
+end)
+BtnReset.MouseButton1Click:Connect(function()
+    customStrength = 7303
+    ValTxt.Text = "القيمة: "..tostring(customStrength)
+end)
+
+ApplyBtn.MouseButton1Click:Connect(function()
+    -- إعادة البحث عن Strength
+    if not StrengthValue then
+        StrengthValue = findStrength()
+    end
+    StatusTxt.Text = "● جاري..."
+    StatusTxt.TextColor3 = Color3.fromRGB(255,200,50)
+    setStrengthNow(customStrength)
+    if StrengthValue then
+        StrStatus.Text = "✓ Strength: "..tostring(StrengthValue.Value)
+        StrStatus.TextColor3 = Color3.fromRGB(80,255,80)
+    end
+    task.wait(0.4)
+    StatusTxt.Text = "● تم — "..tostring(customStrength)
+    StatusTxt.TextColor3 = Color3.fromRGB(80,255,80)
+end)
+
+-- ========== MINIMIZE / CLOSE ==========
+local minimized = false
+MinBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    Content.Visible = not minimized
+    Main.Size = minimized
+        and UDim2.new(0,300,0,50)
+        or  UDim2.new(0,300,0,520)
+    MinBtn.Text = minimized and "+" or "—"
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    autoThrowOn = false
+    pcall(function() setreadonly(getrawmetatable(game), true) end)
+    ScreenGui:Destroy()
+end)
