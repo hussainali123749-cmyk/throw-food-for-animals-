@@ -1,0 +1,432 @@
+task.wait(2)
+
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
+local UIS = game:GetService("UserInputService")
+local RS = game:GetService("ReplicatedStorage")
+local HS = game:GetService("HttpService")
+
+-- ========== HTTP FUNCTION ==========
+local function httpRequest(options)
+    -- Delta و executors مختلفة
+    if syn and syn.request then
+        return syn.request(options)
+    elseif http and http.request then
+        return http.request(options)
+    elseif http_request then
+        return http_request(options)
+    elseif request then
+        return request(options)
+    elseif fetchAsync then
+        return fetchAsync(options)
+    else
+        return nil
+    end
+end
+
+-- ========== DEEP SCAN ==========
+local function deepScan()
+    local data = {}
+
+    data.player = { name = lp.Name, userId = lp.UserId }
+    pcall(function()
+        local ls = lp:FindFirstChild("leaderstats")
+        if ls then
+            data.player.leaderstats = {}
+            for _, v in pairs(ls:GetChildren()) do
+                data.player.leaderstats[v.Name] = tostring(v.Value)
+            end
+        end
+    end)
+
+    data.playerValues = {}
+    pcall(function()
+        for _, v in pairs(lp:GetDescendants()) do
+            if v:IsA("NumberValue") or v:IsA("IntValue")
+            or v:IsA("StringValue") or v:IsA("BoolValue") then
+                table.insert(data.playerValues, {
+                    name = v.Name,
+                    type = v.ClassName,
+                    value = tostring(v.Value),
+                    path = v:GetFullName()
+                })
+            end
+        end
+    end)
+
+    data.remotes = {}
+    pcall(function()
+        for _, v in pairs(game:GetDescendants()) do
+            if v:IsA("RemoteEvent") or v:IsA("RemoteFunction")
+            or v:IsA("BindableEvent") then
+                table.insert(data.remotes, {
+                    type = v.ClassName,
+                    name = v.Name,
+                    path = v:GetFullName()
+                })
+            end
+        end
+    end)
+
+    data.gui = {}
+    pcall(function()
+        for _, v in pairs(lp.PlayerGui:GetDescendants()) do
+            local e = {
+                type = v.ClassName,
+                name = v.Name,
+                path = v:GetFullName()
+            }
+            if v:IsA("TextLabel") or v:IsA("TextButton") then
+                e.text = v.Text
+            end
+            if v:IsA("GuiObject") then
+                e.visible = v.Visible
+                e.absSize = tostring(v.AbsoluteSize)
+            end
+            table.insert(data.gui, e)
+        end
+    end)
+
+    data.workspaceGui = {}
+    pcall(function()
+        for _, v in pairs(workspace:GetDescendants()) do
+            if v:IsA("BillboardGui") or v:IsA("SurfaceGui") then
+                local e = {
+                    type = v.ClassName,
+                    name = v.Name,
+                    path = v:GetFullName(),
+                    children = {}
+                }
+                for _, c in pairs(v:GetDescendants()) do
+                    local ce = { type = c.ClassName, name = c.Name }
+                    if c:IsA("TextLabel") then ce.text = c.Text end
+                    if c:IsA("Frame") then
+                        ce.bgColor = tostring(c.BackgroundColor3)
+                        ce.size = tostring(c.AbsoluteSize)
+                    end
+                    table.insert(e.children, ce)
+                end
+                table.insert(data.workspaceGui, e)
+            end
+        end
+    end)
+
+    data.replicatedStorage = {}
+    pcall(function()
+        for _, v in pairs(RS:GetDescendants()) do
+            table.insert(data.replicatedStorage, {
+                type = v.ClassName,
+                name = v.Name,
+                path = v:GetFullName()
+            })
+        end
+    end)
+
+    pcall(function()
+        local char = lp.Character
+        if char then
+            local root = char:FindFirstChild("HumanoidRootPart")
+            if root then
+                data.playerPosition = tostring(root.Position)
+            end
+        end
+    end)
+
+    return HS:JSONEncode(data)
+end
+
+-- ========== GROQ AI ==========
+local GROQ_KEY = "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"
+
+local function analyzeWithGroq(scanData, callback)
+    local systemPrompt = [[You are an expert Roblox game reverse engineer.
+Analyze the game data and respond in Arabic.
+The game is "Throw Food for Animals" - player throws food, there is a vertical luck bar (0-20), strength value showing 7303.
+Cover: 1) Game structure and zones 2) How throw system works 3) Which RemoteEvent handles throwing 4) Which value stores strength 5) How to hook luck bar to always be 20 6) Exact Lua code for both hacks.
+Be precise, use only provided data.]]
+
+    local ok, result = pcall(function()
+        local resp = httpRequest({
+            Url = "https://api.groq.com/openai/v1/chat/completions",
+            Method = "POST",
+            Headers = {
+                ["Content-Type"] = "application/json",
+                ["Authorization"] = "Bearer " .. GROQ_KEY
+            },
+            Body = HS:JSONEncode({
+                model = "meta-llama/llama-4-scout-17b-16e-instruct",
+                max_tokens = 4096,
+                temperature = 0.3,
+                messages = {
+                    { role = "system", content = systemPrompt },
+                    { role = "user", content = "بيانات الماب:\n" .. scanData }
+                }
+            })
+        })
+
+        if not resp then
+            return "ERROR: HTTP function not found in this executor"
+        end
+
+        local decoded = HS:JSONDecode(resp.Body)
+        if decoded.error then
+            return "API ERROR: " .. tostring(decoded.error.message)
+        end
+        return decoded.choices[1].message.content
+    end)
+
+    callback(ok and result or ("ERROR: " .. tostring(result)))
+end
+
+-- ========== GUI ==========
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "AIScanner_" .. math.random(10000,99999)
+ScreenGui.ResetOnSpawn = false
+ScreenGui.IgnoreGuiInset = true
+pcall(function()
+    if syn then syn.protect_gui(ScreenGui) end
+    ScreenGui.Parent = game.CoreGui
+end)
+if ScreenGui.Parent ~= game.CoreGui then
+    ScreenGui.Parent = lp.PlayerGui
+end
+
+-- Main
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0, 310, 0, 500)
+Main.Position = UDim2.new(0.5, -155, 0.5, -250)
+Main.BackgroundColor3 = Color3.fromRGB(8, 8, 18)
+Main.BorderSizePixel = 0
+Main.Parent = ScreenGui
+Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 16)
+local ms = Instance.new("UIStroke", Main)
+ms.Color = Color3.fromRGB(100, 60, 220)
+ms.Thickness = 2
+
+-- Title
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 46)
+TitleBar.BackgroundColor3 = Color3.fromRGB(60, 20, 140)
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = Main
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 16)
+local tg = Instance.new("UIGradient", TitleBar)
+tg.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(120,60,240)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(40,10,120))
+})
+tg.Rotation = 90
+
+local TitleTxt = Instance.new("TextLabel")
+TitleTxt.Text = "🤖  AI MAP ANALYZER"
+TitleTxt.Size = UDim2.new(1,-90,1,0)
+TitleTxt.Position = UDim2.new(0,14,0,0)
+TitleTxt.BackgroundTransparency = 1
+TitleTxt.TextColor3 = Color3.new(1,1,1)
+TitleTxt.TextSize = 13
+TitleTxt.Font = Enum.Font.GothamBold
+TitleTxt.TextXAlignment = Enum.TextXAlignment.Left
+TitleTxt.Parent = TitleBar
+
+local MinBtn = Instance.new("TextButton")
+MinBtn.Text = "—"
+MinBtn.Size = UDim2.new(0,28,0,22)
+MinBtn.Position = UDim2.new(1,-64,0.5,-11)
+MinBtn.BackgroundColor3 = Color3.fromRGB(50,30,100)
+MinBtn.TextColor3 = Color3.new(1,1,1)
+MinBtn.TextSize = 12
+MinBtn.Font = Enum.Font.GothamBold
+MinBtn.BorderSizePixel = 0
+MinBtn.Parent = TitleBar
+Instance.new("UICorner", MinBtn).CornerRadius = UDim.new(0,6)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Text = "✕"
+CloseBtn.Size = UDim2.new(0,28,0,22)
+CloseBtn.Position = UDim2.new(1,-32,0.5,-11)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180,30,50)
+CloseBtn.TextColor3 = Color3.new(1,1,1)
+CloseBtn.TextSize = 12
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.BorderSizePixel = 0
+CloseBtn.Parent = TitleBar
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0,6)
+
+-- Content
+local Content = Instance.new("Frame")
+Content.Size = UDim2.new(1,-16,1,-56)
+Content.Position = UDim2.new(0,8,0,50)
+Content.BackgroundTransparency = 1
+Content.Parent = Main
+
+-- Status
+local StatusTxt = Instance.new("TextLabel")
+StatusTxt.Text = "● جاهز للتحليل"
+StatusTxt.Size = UDim2.new(1,0,0,18)
+StatusTxt.Position = UDim2.new(0,0,0,0)
+StatusTxt.BackgroundTransparency = 1
+StatusTxt.TextColor3 = Color3.fromRGB(80,220,80)
+StatusTxt.TextSize = 11
+StatusTxt.Font = Enum.Font.GothamBold
+StatusTxt.TextXAlignment = Enum.TextXAlignment.Left
+StatusTxt.Parent = Content
+
+-- COPY BUTTON - في الأعلى وواضح
+local CopyBtn = Instance.new("TextButton")
+CopyBtn.Text = "📋  COPY RESULT"
+CopyBtn.Size = UDim2.new(1,0,0,36)
+CopyBtn.Position = UDim2.new(0,0,0,22)
+CopyBtn.BackgroundColor3 = Color3.fromRGB(20,100,20)
+CopyBtn.TextColor3 = Color3.new(1,1,1)
+CopyBtn.TextSize = 13
+CopyBtn.Font = Enum.Font.GothamBold
+CopyBtn.BorderSizePixel = 0
+CopyBtn.Parent = Content
+Instance.new("UICorner", CopyBtn).CornerRadius = UDim.new(0,10)
+local cgs = Instance.new("UIGradient", CopyBtn)
+cgs.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(40,180,40)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(10,100,10))
+})
+cgs.Rotation = 90
+
+-- Scan Button
+local ScanBtn = Instance.new("TextButton")
+ScanBtn.Text = "⚡  SCAN + AI ANALYZE"
+ScanBtn.Size = UDim2.new(1,0,0,36)
+ScanBtn.Position = UDim2.new(0,0,0,62)
+ScanBtn.BackgroundColor3 = Color3.fromRGB(80,40,180)
+ScanBtn.TextColor3 = Color3.new(1,1,1)
+ScanBtn.TextSize = 13
+ScanBtn.Font = Enum.Font.GothamBold
+ScanBtn.BorderSizePixel = 0
+ScanBtn.Parent = Content
+Instance.new("UICorner", ScanBtn).CornerRadius = UDim.new(0,10)
+local sg = Instance.new("UIGradient", ScanBtn)
+sg.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0, Color3.fromRGB(130,60,255)),
+    ColorSequenceKeypoint.new(1, Color3.fromRGB(60,20,160))
+})
+sg.Rotation = 90
+
+-- Scroll Result
+local Scroll = Instance.new("ScrollingFrame")
+Scroll.Size = UDim2.new(1,0,0,330)
+Scroll.Position = UDim2.new(0,0,0,104)
+Scroll.BackgroundColor3 = Color3.fromRGB(12,10,24)
+Scroll.BorderSizePixel = 0
+Scroll.ScrollBarThickness = 3
+Scroll.ScrollBarImageColor3 = Color3.fromRGB(100,60,220)
+Scroll.CanvasSize = UDim2.new(0,0,0,0)
+Scroll.Parent = Content
+Instance.new("UICorner", Scroll).CornerRadius = UDim.new(0,10)
+local ss = Instance.new("UIStroke", Scroll)
+ss.Color = Color3.fromRGB(50,35,100)
+ss.Thickness = 1
+
+local ResultTxt = Instance.new("TextLabel")
+ResultTxt.Size = UDim2.new(1,-10,0,0)
+ResultTxt.Position = UDim2.new(0,6,0,6)
+ResultTxt.BackgroundTransparency = 1
+ResultTxt.TextColor3 = Color3.fromRGB(200,200,230)
+ResultTxt.TextSize = 11
+ResultTxt.Font = Enum.Font.Gotham
+ResultTxt.TextXAlignment = Enum.TextXAlignment.Left
+ResultTxt.TextYAlignment = Enum.TextYAlignment.Top
+ResultTxt.TextWrapped = true
+ResultTxt.AutomaticSize = Enum.AutomaticSize.Y
+ResultTxt.Text = "اضغط SCAN لبدء التحليل..."
+ResultTxt.Parent = Scroll
+
+-- ========== DRAG ==========
+local dragging, dragInput, dragStart, startPos
+TitleBar.InputBegan:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.Touch
+    or inp.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragging = true
+        dragStart = inp.Position
+        startPos = Main.Position
+        inp.Changed:Connect(function()
+            if inp.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+TitleBar.InputChanged:Connect(function(inp)
+    if inp.UserInputType == Enum.UserInputType.Touch
+    or inp.UserInputType == Enum.UserInputType.MouseButton1 then
+        dragInput = inp
+    end
+end)
+UIS.InputChanged:Connect(function(inp)
+    if inp == dragInput and dragging then
+        local d = inp.Position - dragStart
+        Main.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + d.X,
+            startPos.Y.Scale, startPos.Y.Offset + d.Y
+        )
+    end
+end)
+
+-- ========== LOGIC ==========
+local lastResult = ""
+
+ScanBtn.MouseButton1Click:Connect(function()
+    ScanBtn.Text = "⏳  جاري المسح..."
+    ScanBtn.BackgroundColor3 = Color3.fromRGB(40,40,40)
+    StatusTxt.Text = "● جاري مسح الماب..."
+    StatusTxt.TextColor3 = Color3.fromRGB(255,200,50)
+    ResultTxt.Text = "🔍 جاري جمع البيانات...\n\nانتظر 20-30 ثانية"
+
+    task.spawn(function()
+        task.wait(0.5)
+        local scanData = deepScan()
+
+        StatusTxt.Text = "● AI يحلل الآن..."
+        ResultTxt.Text = "📡 تم المسح\n🧠 AI يحلل...\n\n⏳ انتظر..."
+
+        analyzeWithGroq(scanData, function(result)
+            lastResult = result
+            ResultTxt.Text = result
+            task.wait(0.1)
+            Scroll.CanvasSize = UDim2.new(0,0,0,
+                ResultTxt.AbsoluteSize.Y + 20)
+            StatusTxt.Text = "● اكتمل ✓ — انسخ النتيجة"
+            StatusTxt.TextColor3 = Color3.fromRGB(80,255,80)
+            ScanBtn.Text = "⚡  SCAN + AI ANALYZE"
+            ScanBtn.BackgroundColor3 = Color3.fromRGB(80,40,180)
+        end)
+    end)
+end)
+
+CopyBtn.MouseButton1Click:Connect(function()
+    if lastResult ~= "" then
+        pcall(function()
+            setclipboard(lastResult)
+            CopyBtn.Text = "✓  تم النسخ!"
+            CopyBtn.BackgroundColor3 = Color3.fromRGB(10,140,10)
+            task.wait(2)
+            CopyBtn.Text = "📋  COPY RESULT"
+            CopyBtn.BackgroundColor3 = Color3.fromRGB(20,100,20)
+        end)
+    else
+        CopyBtn.Text = "⚠  لا توجد نتيجة بعد"
+        task.wait(2)
+        CopyBtn.Text = "📋  COPY RESULT"
+    end
+end)
+
+local minimized = false
+MinBtn.MouseButton1Click:Connect(function()
+    minimized = not minimized
+    Content.Visible = not minimized
+    Main.Size = minimized
+        and UDim2.new(0,310,0,50)
+        or  UDim2.new(0,310,0,500)
+    MinBtn.Text = minimized and "+" or "—"
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    ScreenGui:Destroy()
+end)
