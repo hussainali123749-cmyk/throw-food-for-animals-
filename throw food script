@@ -1,0 +1,347 @@
+task.wait(2)
+
+local Players = game:GetService("Players")
+local lp = Players.LocalPlayer
+local RS = game:GetService("ReplicatedStorage")
+
+local results = {}
+local function add(line) table.insert(results, tostring(line)) end
+local function header(title) add("\n========== "..title.." ==========") end
+
+header("PLAYER INFO")
+pcall(function()
+    add("Name: "..lp.Name)
+    add("UserId: "..lp.UserId)
+    local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+    if root then add("Position: "..tostring(root.Position)) end
+end)
+
+header("LEADERSTATS")
+pcall(function()
+    local ls = lp:FindFirstChild("leaderstats")
+    if ls then
+        for _,v in pairs(ls:GetDescendants()) do
+            add(v.Name.." = "..tostring(v.Value).." ["..v.ClassName.."] | "..v:GetFullName())
+        end
+    else add("NO LEADERSTATS") end
+end)
+
+header("ALL PLAYER VALUES")
+pcall(function()
+    for _,v in pairs(lp:GetDescendants()) do
+        if v:IsA("NumberValue") or v:IsA("IntValue")
+        or v:IsA("StringValue") or v:IsA("BoolValue") then
+            add(v.ClassName.." | "..v.Name.." = "..tostring(v.Value).." | "..v:GetFullName())
+        end
+    end
+end)
+
+header("ALL REMOTES")
+pcall(function()
+    for _,v in pairs(game:GetDescendants()) do
+        if v:IsA("RemoteEvent") or v:IsA("RemoteFunction")
+        or v:IsA("BindableEvent") or v:IsA("BindableFunction") then
+            add(v.ClassName.." | "..v:GetFullName())
+        end
+    end
+end)
+
+header("REPLICATED STORAGE TREE")
+pcall(function()
+    local function scan(obj, depth)
+        if depth > 6 then return end
+        for _,v in pairs(obj:GetChildren()) do
+            local extra = ""
+            if v:IsA("NumberValue") or v:IsA("IntValue") or v:IsA("StringValue") then
+                extra = " = "..tostring(v.Value)
+            end
+            add(string.rep("  ",depth)..v.ClassName.." | "..v.Name..extra)
+            scan(v, depth+1)
+        end
+    end
+    scan(RS, 0)
+end)
+
+header("WORKSPACE STRUCTURE")
+pcall(function()
+    local function scan(obj, depth)
+        if depth > 5 then return end
+        for _,v in pairs(obj:GetChildren()) do
+            local extra = ""
+            if v:IsA("BasePart") then
+                extra = " | pos:"..tostring(v.Position).." | size:"..tostring(v.Size)
+            elseif v:IsA("NumberValue") or v:IsA("IntValue") then
+                extra = " | val:"..tostring(v.Value)
+            end
+            add(string.rep("  ",depth)..v.ClassName.." | "..v.Name..extra)
+            scan(v, depth+1)
+        end
+    end
+    scan(workspace, 0)
+end)
+
+header("IMPORTANT PARTS BY KEYWORD")
+local keywords = {
+    "throw","start","zone","gym","weight","strength","power",
+    "animal","feed","food","luck","meter","spawn","train",
+    "lift","press","begin","area","region","plot","station",
+    "launch","toss","fling","bar","gauge","indicator","trigger"
+}
+pcall(function()
+    for _,v in pairs(workspace:GetDescendants()) do
+        if v:IsA("BasePart") or v:IsA("Model") then
+            local name = v.Name:lower()
+            for _,kw in ipairs(keywords) do
+                if name:find(kw) then
+                    local pos = "?"
+                    pcall(function()
+                        if v:IsA("BasePart") then
+                            pos = tostring(v.Position)
+                        else
+                            local p = v:FindFirstChildWhichIsA("BasePart",true)
+                            if p then pos = tostring(p.Position) end
+                        end
+                    end)
+                    add(v.ClassName.." | "..v.Name.." | "..pos.." | "..v:GetFullName())
+                    break
+                end
+            end
+        end
+    end
+end)
+
+header("GUI FULL")
+pcall(function()
+    local function scan(obj, depth)
+        if depth > 5 then return end
+        for _,v in pairs(obj:GetChildren()) do
+            local extra = ""
+            if v:IsA("TextLabel") or v:IsA("TextButton") then
+                extra = " | text:\""..tostring(v.Text).."\""
+            end
+            if v:IsA("GuiObject") then
+                extra = extra.." | vis:"..tostring(v.Visible)
+                extra = extra.." | sz:"..tostring(v.AbsoluteSize)
+            end
+            add(string.rep("  ",depth)..v.ClassName.." | "..v.Name..extra)
+            scan(v, depth+1)
+        end
+    end
+    scan(lp.PlayerGui, 0)
+end)
+
+header("WORKSPACE VALUES")
+pcall(function()
+    for _,v in pairs(workspace:GetDescendants()) do
+        if v:IsA("NumberValue") or v:IsA("IntValue")
+        or v:IsA("StringValue") or v:IsA("BoolValue") then
+            add(v.ClassName.." | "..v.Name.." = "..tostring(v.Value).." | "..v:GetFullName())
+        end
+    end
+end)
+
+header("NEAREST 50 PARTS TO PLAYER")
+pcall(function()
+    local root = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+    if root then
+        local playerPos = root.Position
+        local parts = {}
+        for _,v in pairs(workspace:GetDescendants()) do
+            if v:IsA("BasePart") then
+                local ok,dist = pcall(function()
+                    return (v.Position - playerPos).Magnitude
+                end)
+                if ok and dist < 150 then
+                    table.insert(parts,{v=v,dist=dist})
+                end
+            end
+        end
+        table.sort(parts,function(a,b) return a.dist < b.dist end)
+        for i=1,math.min(50,#parts) do
+            local p = parts[i]
+            add("dist:"..math.floor(p.dist).." | "..p.v.Name.." | "..tostring(p.v.Position).." | "..p.v:GetFullName())
+        end
+    end
+end)
+
+header("SCRIPTS")
+pcall(function()
+    for _,v in pairs(game:GetDescendants()) do
+        if v:IsA("LocalScript") or v:IsA("Script") or v:IsA("ModuleScript") then
+            add(v.ClassName.." | "..v:GetFullName())
+        end
+    end
+end)
+
+-- ========== SAVE ==========
+local finalText = table.concat(results,"\n")
+local savedPath = "لم يُحفظ"
+local saved = false
+
+local paths = {
+    "/storage/emulated/0/Download/mapdata.txt",
+    "/storage/emulated/0/Documents/mapdata.txt",
+    "/storage/emulated/0/DCIM/mapdata.txt",
+    "/storage/emulated/0/mapdata.txt",
+    "/sdcard/Download/mapdata.txt",
+    "/sdcard/mapdata.txt",
+    "/data/local/tmp/mapdata.txt",
+    "/storage/emulated/0/Android/data/com.roblox.client/files/gloop/external/mapdata.txt",
+    "mapdata.txt",
+}
+
+for _,path in ipairs(paths) do
+    if not saved then
+        local ok = pcall(function() writefile(path, finalText) end)
+        if ok then
+            saved = true
+            savedPath = path
+        end
+    end
+end
+
+-- نسخ للحافظة دائماً
+pcall(function() setclipboard(finalText) end)
+
+-- ========== GUI ==========
+local UIS = game:GetService("UserInputService")
+local sg = Instance.new("ScreenGui")
+sg.Name = "MapDump"
+sg.ResetOnSpawn = false
+sg.IgnoreGuiInset = true
+pcall(function()
+    if syn then syn.protect_gui(sg) end
+    sg.Parent = game.CoreGui
+end)
+if sg.Parent ~= game.CoreGui then sg.Parent = lp.PlayerGui end
+
+local Main = Instance.new("Frame")
+Main.Size = UDim2.new(0,290,0,200)
+Main.Position = UDim2.new(0,10,0,10)
+Main.BackgroundColor3 = Color3.fromRGB(8,8,18)
+Main.BorderSizePixel = 0
+Main.Parent = sg
+Instance.new("UICorner",Main).CornerRadius = UDim.new(0,14)
+local ms = Instance.new("UIStroke",Main)
+ms.Color = saved and Color3.fromRGB(50,180,50) or Color3.fromRGB(220,100,20)
+ms.Thickness = 2
+
+local TB = Instance.new("Frame")
+TB.Size = UDim2.new(1,0,0,42)
+TB.BackgroundColor3 = Color3.fromRGB(60,20,140)
+TB.BorderSizePixel = 0
+TB.Parent = Main
+Instance.new("UICorner",TB).CornerRadius = UDim.new(0,14)
+local tbg = Instance.new("UIGradient",TB)
+tbg.Color = ColorSequence.new({
+    ColorSequenceKeypoint.new(0,Color3.fromRGB(120,60,240)),
+    ColorSequenceKeypoint.new(1,Color3.fromRGB(40,10,120))
+})
+tbg.Rotation = 90
+
+local TTxt = Instance.new("TextLabel")
+TTxt.Text = "🗺️ MAP DUMP"
+TTxt.Size = UDim2.new(1,-60,1,0)
+TTxt.Position = UDim2.new(0,12,0,0)
+TTxt.BackgroundTransparency = 1
+TTxt.TextColor3 = Color3.new(1,1,1)
+TTxt.TextSize = 13
+TTxt.Font = Enum.Font.GothamBold
+TTxt.TextXAlignment = Enum.TextXAlignment.Left
+TTxt.Parent = TB
+
+local XBtn = Instance.new("TextButton")
+XBtn.Text = "✕"
+XBtn.Size = UDim2.new(0,26,0,20)
+XBtn.Position = UDim2.new(1,-30,0.5,-10)
+XBtn.BackgroundColor3 = Color3.fromRGB(180,30,50)
+XBtn.TextColor3 = Color3.new(1,1,1)
+XBtn.TextSize = 11
+XBtn.Font = Enum.Font.GothamBold
+XBtn.BorderSizePixel = 0
+XBtn.Parent = TB
+Instance.new("UICorner",XBtn).CornerRadius = UDim.new(0,5)
+
+local C = Instance.new("Frame")
+C.Size = UDim2.new(1,-14,1,-50)
+C.Position = UDim2.new(0,7,0,46)
+C.BackgroundTransparency = 1
+C.Parent = Main
+
+local St1 = Instance.new("TextLabel")
+St1.Text = saved and "✓ تم الحفظ" or "✗ فشل الحفظ — تم النسخ للحافظة"
+St1.Size = UDim2.new(1,0,0,18)
+St1.Position = UDim2.new(0,0,0,0)
+St1.BackgroundTransparency = 1
+St1.TextColor3 = saved and Color3.fromRGB(80,255,80) or Color3.fromRGB(255,180,50)
+St1.TextSize = 11
+St1.Font = Enum.Font.GothamBold
+St1.TextXAlignment = Enum.TextXAlignment.Left
+St1.Parent = C
+
+local St2 = Instance.new("TextLabel")
+St2.Text = "📁 "..savedPath
+St2.Size = UDim2.new(1,0,0,28)
+St2.Position = UDim2.new(0,0,0,20)
+St2.BackgroundTransparency = 1
+St2.TextColor3 = Color3.fromRGB(120,120,180)
+St2.TextSize = 9
+St2.Font = Enum.Font.Gotham
+St2.TextXAlignment = Enum.TextXAlignment.Left
+St2.TextWrapped = true
+St2.Parent = C
+
+local St3 = Instance.new("TextLabel")
+St3.Text = "📊 عناصر: "..#results.." | 📋 تم النسخ للحافظة تلقائياً"
+St3.Size = UDim2.new(1,0,0,16)
+St3.Position = UDim2.new(0,0,0,50)
+St3.BackgroundTransparency = 1
+St3.TextColor3 = Color3.fromRGB(150,150,200)
+St3.TextSize = 9
+St3.Font = Enum.Font.Gotham
+St3.TextXAlignment = Enum.TextXAlignment.Left
+St3.TextWrapped = true
+St3.Parent = C
+
+local CopyBtn = Instance.new("TextButton")
+CopyBtn.Text = "📋 COPY AGAIN"
+CopyBtn.Size = UDim2.new(1,0,0,32)
+CopyBtn.Position = UDim2.new(0,0,0,70)
+CopyBtn.BackgroundColor3 = Color3.fromRGB(20,100,20)
+CopyBtn.TextColor3 = Color3.new(1,1,1)
+CopyBtn.TextSize = 12
+CopyBtn.Font = Enum.Font.GothamBold
+CopyBtn.BorderSizePixel = 0
+CopyBtn.Parent = C
+Instance.new("UICorner",CopyBtn).CornerRadius = UDim.new(0,8)
+
+-- Drag
+local drag,dInp,dSt,dPos = false,nil,nil,nil
+TB.InputBegan:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.Touch
+    or i.UserInputType==Enum.UserInputType.MouseButton1 then
+        drag=true; dSt=i.Position; dPos=Main.Position
+        i.Changed:Connect(function()
+            if i.UserInputState==Enum.UserInputState.End then drag=false end
+        end)
+    end
+end)
+TB.InputChanged:Connect(function(i)
+    if i.UserInputType==Enum.UserInputType.Touch
+    or i.UserInputType==Enum.UserInputType.MouseButton1 then dInp=i end
+end)
+UIS.InputChanged:Connect(function(i)
+    if i==dInp and drag then
+        local d=i.Position-dSt
+        Main.Position=UDim2.new(dPos.X.Scale,dPos.X.Offset+d.X,dPos.Y.Scale,dPos.Y.Offset+d.Y)
+    end
+end)
+
+CopyBtn.MouseButton1Click:Connect(function()
+    pcall(function() setclipboard(finalText) end)
+    CopyBtn.Text = "✓ تم النسخ!"
+    task.wait(2)
+    CopyBtn.Text = "📋 COPY AGAIN"
+end)
+
+XBtn.MouseButton1Click:Connect(function() sg:Destroy() end)
